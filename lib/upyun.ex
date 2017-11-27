@@ -1,10 +1,9 @@
 defmodule Upyun do
-
   @moduledoc """
   This is a simple client library for Upyun.
 
   ## Notes on configuration
-  
+
   All the APIs need a `policy` to be passed in. A `policy` contains
   the configuration information about the connection detail, such
   as bucket, operator, and api endpoint.
@@ -25,7 +24,12 @@ defmodule Upyun do
   #=> :ok
   ```
   """
-  @type policy :: %Upyun{bucket: String.t, operator: String.t, password: String.t, endpoint: atom}
+  @type policy :: %Upyun{
+          bucket: String.t(),
+          operator: String.t(),
+          password: String.t(),
+          endpoint: atom
+        }
   defstruct bucket: nil, operator: nil, password: nil, endpoint: :v0
 
   @type info :: {:file, integer, integer} | {:dir, integer, integer}
@@ -49,42 +53,44 @@ defmodule Upyun do
   """
   @spec list(policy, binary) :: :ok | {:error, any}
   def list(policy, path \\ "/") do
-    resp = policy
+    resp =
+      policy
       |> to_url(path)
       |> HTTPoison.get!(headers(policy))
 
     case resp.status_code do
       200 ->
         {:ok, parse_list(resp.body)}
+
       _ ->
         {:error, resp.body}
     end
-
   end
-
 
   defp to_url(policy, path) do
     %{bucket: bucket, endpoint: endpoint} = policy
     "https://#{endpoint}.api.upyun.com/#{bucket}#{path}"
   end
 
-
   defp parse_list(body) do
     body
-      |> String.split("\n")
-      |> Enum.map(&parse_line/1)
+    |> String.split("\n")
+    |> Enum.map(&parse_line/1)
   end
-
 
   defp parse_line(line) do
     case String.split(line, "\t") do
       # TODO: add modified time data
-      [name, "F" | _] -> {:dir, name}
-      [name, "N" | _] -> {:file, name}
-      _ -> nil
+      [name, "F" | _] ->
+        {:dir, name}
+
+      [name, "N" | _] ->
+        {:file, name}
+
+      _ ->
+        nil
     end
   end
-
 
   @doc """
   Get information of an object.
@@ -106,24 +112,27 @@ defmodule Upyun do
   """
   @spec info(policy, binary) :: info | {:error, :not_found} | {:error, any}
   def info(policy, path) do
-    resp = policy
+    resp =
+      policy
       |> to_url(path)
       |> HTTPoison.head!(headers(policy))
 
     case resp.status_code do
       200 -> parse_info(resp)
       404 -> {:error, :not_found}
-      _   -> {:error, resp.body}
+      _ -> {:error, resp.body}
     end
   end
 
-
   defp parse_info(resp) do
-    headers = resp.headers
-      |> Enum.into(%{}, fn({k, v}) -> {
-        k |> String.downcase |> String.to_atom,
-        v
-      } end)
+    headers =
+      resp.headers
+      |> Enum.into(%{}, fn {k, v} ->
+           {
+             k |> String.downcase() |> String.to_atom(),
+             v
+           }
+         end)
 
     {
       parse_upyun_file_type(headers),
@@ -132,41 +141,33 @@ defmodule Upyun do
     }
   end
 
-
   defp parse_upyun_file_type(%{:"x-upyun-file-type" => "file"}) do
     :file
   end
-
 
   defp parse_upyun_file_type(%{:"x-upyun-file-type" => "folder"}) do
     :dir
   end
 
-
   defp parse_upyun_file_type(_) do
     :unknown
   end
-
 
   defp parse_upyun_file_size(%{:"x-upyun-file-size" => num}) when is_binary(num) do
     String.to_integer(num)
   end
 
-
   defp parse_upyun_file_size(_) do
     0
   end
-
 
   defp parse_upyun_file_date(%{:"x-upyun-file-date" => date}) do
     String.to_integer(date)
   end
 
-
   defp parse_upyun_file_date(_) do
     nil
   end
-
 
   @doc """
   Upload a file from local to remote.
@@ -185,7 +186,7 @@ defmodule Upyun do
   policy |> Upyun.upload("/path/to/local/file", "/path/to/remote/object")
   #=> :ok
   ```
-  
+
   ### Sending custom headers
 
   By default, `elixir-upyun` will automatically send `Content-Type` header for you.
@@ -200,11 +201,13 @@ defmodule Upyun do
   """
   @spec upload(policy, binary, binary, [any]) :: :ok | {:error, any}
   def upload(policy, local_path, remote_path, opts \\ []) do
-    opts = opts
+    opts =
+      opts
       |> Keyword.put_new(
-        :headers,
-        [{:"Content-Type", MIME.from_path(local_path)}]
-      )
+           :headers,
+           [{:"Content-Type", MIME.from_path(local_path)}]
+         )
+
     put(
       policy,
       File.read!(local_path),
@@ -212,7 +215,6 @@ defmodule Upyun do
       opts
     )
   end
-
 
   @doc """
   Create or update remote file with raw content.
@@ -245,13 +247,13 @@ defmodule Upyun do
     hds = headers(policy, opts)
     timeout = Keyword.get(opts, :timeout, @default_upload_timeout)
 
-    %{status_code: 200} = policy
+    %{status_code: 200} =
+      policy
       |> to_url(path)
       |> HTTPoison.put!(content, hds, recv_timeout: timeout)
 
     :ok
   end
-
 
   @doc """
   Upload all files recursively in local directory to remote.
@@ -265,9 +267,9 @@ defmodule Upyun do
 
   Returns an list of result object. A result object is a tuple,
   with local file name first, and the result (`:ok`) followed.
-  
+
   ## Examples
-  
+
   ```elixir
   policy |> upload_dir("/etc", "/remote/etc")
   #=> [{"passwd", :ok}, {"fastab", :ok}, ...]
@@ -277,18 +279,19 @@ defmodule Upyun do
   def upload_dir(policy, local_dir, remote_path, opts \\ []) do
     local_dir
     |> Path.join("**")
-    |> Path.wildcard
+    |> Path.wildcard()
     |> Enum.reject(&File.dir?/1)
     |> Enum.each(
-      fn (file) ->
-        local = file
-          |> Path.expand
-          |> Path.relative_to(Path.expand(local_dir))
-        {file, upload(policy, file, Path.join(remote_path, local), opts)}
-      end
-    )
-  end
+         fn file ->
+           local =
+             file
+             |> Path.expand()
+             |> Path.relative_to(Path.expand(local_dir))
 
+           {file, upload(policy, file, Path.join(remote_path, local), opts)}
+         end
+       )
+  end
 
   @doc """
   Delete a remote file.
@@ -307,7 +310,8 @@ defmodule Upyun do
   """
   @spec delete(policy, binary) :: :ok | {:error, any}
   def delete(policy, path) do
-    resp = policy
+    resp =
+      policy
       |> to_url(path)
       |> HTTPoison.delete!(headers(policy))
 
@@ -317,7 +321,6 @@ defmodule Upyun do
       _ -> {:error, resp.body}
     end
   end
-
 
   @doc """
   Get the content of remote file.
@@ -337,9 +340,9 @@ defmodule Upyun do
   @spec get(policy, binary) :: binary | {:error, :file_not_found}
   def get(policy, path) do
     policy
-      |> to_url(path)
-      |> HTTPoison.get!(headers(policy))
-      |> get_raw_content
+    |> to_url(path)
+    |> HTTPoison.get!(headers(policy))
+    |> get_raw_content
   end
 
   ## helpers
@@ -359,10 +362,11 @@ defmodule Upyun do
 
   defp headers(policy, opts) do
     %{operator: op, password: pw} = policy
+
     defaults = [
-      {:"Accpet"        , "application/json"},
-      {:"Authorization" , "Basic #{sign(op, pw)}"},
-      {:"Date"          , time()}
+      {:Accpet, "application/json"},
+      {:Authorization, "Basic #{sign(op, pw)}"},
+      {:Date, time()}
     ]
 
     hds = Enum.map(opts[:headers] || [], fn {k, v} -> {:"#{k}", v} end)
@@ -378,36 +382,33 @@ defmodule Upyun do
   end
 
   defp time do
-    {date, {h, m, s}} = :calendar.universal_time
-    {year, month, d}  = date
+    {date, {h, m, s}} = :calendar.universal_time()
+    {year, month, d} = date
 
-    month_name = ~w[Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec]
-                  |> Enum.at(month - 1)
-    day_name   = ~w[Mon Tue Wed Thu Fri Sat Sun]
-                  |> Enum.at(:calendar.day_of_the_week(date) - 1)
+    month_name =
+      ~w[Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec]
+      |> Enum.at(month - 1)
 
-    "#{day_name}, #{d} #{month_name} #{year} #{pad h}:#{pad m}:#{pad s} GMT"
+    day_name =
+      ~w[Mon Tue Wed Thu Fri Sat Sun]
+      |> Enum.at(:calendar.day_of_the_week(date) - 1)
+
+    "#{day_name}, #{d} #{month_name} #{year} #{pad(h)}:#{pad(m)}:#{pad(s)} GMT"
   end
-
 
   defp pad(n) do
-    n |> Integer.to_string |> String.rjust(2, ?0)
+    n |> Integer.to_string() |> String.rjust(2, ?0)
   end
-
 
   defp get_raw_content(%HTTPoison.Response{status_code: 200, body: body}) do
     body
   end
 
-  
   defp get_raw_content(%HTTPoison.Response{status_code: 404}) do
     {:error, :file_not_found}
   end
 
-
   defp get_raw_content(%{body: body}) do
     {:error, body}
   end
-
 end
-
