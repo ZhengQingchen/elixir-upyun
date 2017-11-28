@@ -10,8 +10,8 @@ defmodule Upyun.Mixfile do
       app: :hlj_upyun,
       version: "0.1.2",
       elixir: ">= 1.3.0",
-      build_embedded: Mix.env == :prod,
-      start_permanent: Mix.env == :prod,
+      build_embedded: Mix.env() == :prod,
+      start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: @description,
       package: package()
@@ -36,15 +36,14 @@ defmodule Upyun.Mixfile do
   # Type "mix help deps" for more examples and options
   defp deps do
     [
-      {:httpoison, "~> 0.9.0"},
-      {:poison, "~> 2.2"},
-      {:mime, "~> 1.0"},
+      {:httpoison, "~> 0.13"},
+      {:poison, "~> 3.1"},
+      {:mime, "~> 1.1"},
       {:credo, ">= 0.0.0", only: :dev},
       {:ex_doc, ">= 0.0.0", only: :dev},
       {:inch_ex, ">= 0.0.0", only: :docs}
     ]
   end
-
 
   defp package do
     [
